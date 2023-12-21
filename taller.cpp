@@ -15,53 +15,116 @@ public:
     int id;
     string nombre;
     string tipo;
+    vector<pair<Nodo*, pair<int, int>>> conexiones;
 
     Nodo(int _id, const string &_nombre, const string &_tipo)
         : id(_id), nombre(_nombre), tipo(_tipo) {}
-};
-
-class Arista
-{
-public:
-    int idCliente;
-    int idServidor;
-    int velocidad;
-    int distancia;
-
-    Arista(int _idCliente, int _idServidor, int _velocidad, int _distancia)
-        : idCliente(_idCliente), idServidor(_idServidor), velocidad(_velocidad), distancia(_distancia) {}
 };
 
 class Grafo
 {
 public:
     vector<Nodo> nodos;
-    vector<Arista> aristas;
 
     void agregarNodo(int id, const string &nombre, const string &tipo)
     {
         nodos.push_back(Nodo(id, nombre, tipo));
     }
 
-    void agregarArista(int idCliente, int idServidor, int velocidad, int distancia)
+    void agregarConexion(int idNodo1, int idNodo2, int velocidad, int distancia)
     {
-        aristas.push_back(Arista(idCliente, idServidor, velocidad, distancia));
+        Nodo* nodo1 = &nodos[idNodo1];
+        Nodo* nodo2 = &nodos[idNodo2];
+
+        nodo1->conexiones.push_back(make_pair(nodo2, make_pair(velocidad, distancia)));
+        nodo2->conexiones.push_back(make_pair(nodo1, make_pair(velocidad, distancia)));
     }
 
     void imprimirGrafo()
+{
+    cout << "Nodos:" << endl;
+    for (const auto &nodo : nodos)
     {
-        cout << "Nodos:" << endl;
-        for (const auto &nodo : nodos)
+        cout << "ID: " << nodo.id << ", Nombre: " << nodo.nombre << ", Tipo: " << nodo.tipo << endl;
+
+        cout << "Conexiones:" << endl;
+        for (const auto &conexion : nodo.conexiones)
         {
-            cout << "ID: " << nodo.id << ", Nombre: " << nodo.nombre << ", Tipo: " << nodo.tipo << endl;
+            cout << "  Conectado a ID: " << conexion.first->id
+                 << ", Nombre: " << conexion.first->nombre
+                 << ", Velocidad: " << conexion.second.first
+                 << ", Distancia: " << conexion.second.second << endl;
+        }
+    }
+}
+
+    void bellmanFord(int origen, int destino)
+    {
+        vector<int> distancia(nodos.size(), INT_MAX);
+        vector<int> predecesor(nodos.size(), -1);
+
+        distancia[origen] = 0;
+
+        for (size_t i = 0; i < nodos.size() - 1; ++i)
+        {
+            for (const auto &nodo : nodos)
+            {
+                for (const auto &conexion : nodo.conexiones)
+                {
+                    int idNodoCliente = nodo.id;
+                    int idNodoServidor = conexion.first->id;
+                    int peso = conexion.second.second; // Distancia como peso
+
+                    if (distancia[idNodoCliente] != INT_MAX &&
+                        distancia[idNodoCliente] + peso < distancia[idNodoServidor])
+                    {
+                        distancia[idNodoServidor] = distancia[idNodoCliente] + peso;
+                        predecesor[idNodoServidor] = idNodoCliente;
+                    }
+                }
+            }
         }
 
-        cout << "\nAristas:" << endl;
-        for (const auto &arista : aristas)
+        for (const auto &nodo : nodos)
         {
-            cout << "ID Cliente: " << arista.idCliente << ", ID Servidor: " << arista.idServidor
-                 << ", Velocidad: " << arista.velocidad << ", Distancia: " << arista.distancia << endl;
+            for (const auto &conexion : nodo.conexiones)
+            {
+                int idNodoCliente = nodo.id;
+                int idNodoServidor = conexion.first->id;
+                int peso = conexion.second.second; // Distancia como peso
+
+                if (distancia[idNodoCliente] != INT_MAX &&
+                    distancia[idNodoCliente] + peso < distancia[idNodoServidor])
+                {
+                    cerr << "El grafo contiene ciclos negativos." << endl;
+                    exit(EXIT_FAILURE);
+                }
+            }
         }
+
+        cout << "Camino más corto desde el nodo " << origen << " hasta el nodo " << destino << ":" << endl;
+
+        int actual = destino;
+        vector<int> camino;
+        while (actual != -1)
+        {
+            camino.push_back(actual);
+            actual = predecesor[actual];
+        }
+
+        reverse(camino.begin(), camino.end());
+
+        cout << "Ruta: ";
+        for (size_t i = 0; i < camino.size(); ++i)
+        {
+            cout << camino[i];
+            if (i < camino.size() - 1)
+            {
+                cout << " -> ";
+            }
+        }
+
+        cout << "\nTiempo total: " << distancia[destino] << " segundos" << endl;
     }
 };
 
@@ -95,67 +158,11 @@ void cargarDesdeCSV(Grafo &grafo, const string &nombreArchivo)
         }
         else if (datos.size() == 4)
         {
-            grafo.agregarArista(stoi(datos[0]), stoi(datos[1]), stoi(datos[2]), stoi(datos[3]));
-            grafo.agregarArista(stoi(datos[1]), stoi(datos[0]), stoi(datos[2]), stoi(datos[3])); // Añadir arista inversa para grafos no dirigidos
+            grafo.agregarConexion(stoi(datos[0]), stoi(datos[1]), stoi(datos[2]), stoi(datos[3]));
         }
     }
 
     archivo.close();
-}
-
-void bellmanFord(Grafo &grafo, int origen, int destino)
-{
-    vector<int> distancia(grafo.nodos.size(), INT_MAX);
-    vector<int> predecesor(grafo.nodos.size(), -1);
-
-    distancia[origen] = 0;
-
-    for (std::vector<Nodo>::size_type i = 0; i < grafo.nodos.size() - 1; ++i)
-    {
-        for (const auto &arista : grafo.aristas)
-        {
-            if (distancia[arista.idCliente] != INT_MAX &&
-                distancia[arista.idCliente] + arista.distancia < distancia[arista.idServidor])
-            {
-                distancia[arista.idServidor] = distancia[arista.idCliente] + arista.distancia;
-                predecesor[arista.idServidor] = arista.idCliente;
-            }
-        }
-    }
-
-    for (const auto &arista : grafo.aristas)
-    {
-        if (distancia[arista.idCliente] != INT_MAX &&
-            distancia[arista.idCliente] + arista.distancia < distancia[arista.idServidor])
-        {
-            cerr << "El grafo contiene ciclos negativos." << endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    cout << "Camino más corto desde el nodo " << origen << " hasta el nodo " << destino << ":" << endl;
-
-    int actual = destino;
-    vector<int> camino;
-    while (actual != -1)
-    {
-        camino.push_back(actual);
-        actual = predecesor[actual];
-    }
-
-    reverse(camino.begin(), camino.end());
-
-    cout << "Ruta: ";
-    for (int i = 0; i < static_cast<int>(camino.size()); ++i)
-    {
-        cout << camino[i];
-        if (i < static_cast<int>(camino.size() - 1))
-        {
-            cout << " -> ";
-        }
-    }
-
-    cout << "\nTiempo total: " << distancia[destino] << " segundos" << endl;
 }
 
 int main()
@@ -186,7 +193,7 @@ int main()
             cin >> origen;
             cout << "Ingrese el nodo de destino: ";
             cin >> destino;
-            bellmanFord(grafo, origen, destino);
+            grafo.bellmanFord(origen, destino);
             break;
         case 3:
             cout << "Saliendo del programa. Hasta luego." << endl;
